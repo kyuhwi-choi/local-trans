@@ -10,3 +10,5 @@ signing/
 app/libs/*.aar
 # 릴리스 산출물
 dist/
+# 벤치마크 실행 결과 원본 (요약은 bench/RESULTS.md)
+bench/results/

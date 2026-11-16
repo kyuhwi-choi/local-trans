@@ -1,0 +1,60 @@
+{"id": "conv-001", "dialogue": "directions", "turn": 1, "en": "Excuse me, could you tell me how to get to the train station?", "ko_ref": "실례합니다, 기차역에 어떻게 가는지 알려 주실 수 있나요?"}
+{"id": "conv-002", "dialogue": "directions", "turn": 2, "en": "Go straight for two blocks and turn left at the bank.", "ko_ref": "두 블록 직진한 다음 은행에서 왼쪽으로 도세요."}
+{"id": "conv-003", "dialogue": "directions", "turn": 3, "en": "It's about a ten minute walk from here.", "ko_ref": "여기서 걸어서 10분 정도 걸려요."}
+{"id": "conv-004", "dialogue": "directions", "turn": 4, "en": "You can also take the number twelve bus across the street.", "ko_ref": "길 건너편에서 12번 버스를 타셔도 돼요."}
+{"id": "conv-005", "dialogue": "directions", "turn": 5, "en": "The last train leaves at eleven thirty, so don't be late.", "ko_ref": "막차가 11시 30분에 떠나니까 늦지 마세요."}
+{"id": "conv-006", "dialogue": "directions", "turn": 6, "en": "Do you need a ticket, or do you already have one?", "ko_ref": "표가 필요하세요, 아니면 이미 갖고 계세요?"}
+{"id": "conv-007", "dialogue": "directions", "turn": 7, "en": "The ticket machines only take cards, not cash.", "ko_ref": "매표기는 현금은 안 되고 카드만 받아요."}
+{"id": "conv-008", "dialogue": "directions", "turn": 8, "en": "If you get lost, just ask someone at the information desk.", "ko_ref": "길을 잃으면 안내 데스크에 있는 사람에게 물어보세요."}
+{"id": "conv-009", "dialogue": "directions", "turn": 9, "en": "By the way, the station is under construction, so use the east entrance.", "ko_ref": "참고로 역이 공사 중이라 동쪽 출입구를 이용하세요."}
+{"id": "conv-010", "dialogue": "directions", "turn": 10, "en": "Have a safe trip.", "ko_ref": "조심히 가세요."}
+{"id": "conv-011", "dialogue": "restaurant", "turn": 1, "en": "Hi, do you have a reservation?", "ko_ref": "안녕하세요, 예약하셨나요?"}
+{"id": "conv-012", "dialogue": "restaurant", "turn": 2, "en": "How many people are in your party?", "ko_ref": "일행이 몇 분이세요?"}
+{"id": "conv-013", "dialogue": "restaurant", "turn": 3, "en": "We have a table by the window, if you'd like.", "ko_ref": "원하시면 창가 자리가 있습니다."}
+{"id": "conv-014", "dialogue": "restaurant", "turn": 4, "en": "Can I get you something to drink first?", "ko_ref": "먼저 마실 것부터 드릴까요?"}
+{"id": "conv-015", "dialogue": "restaurant", "turn": 5, "en": "Today's special is grilled salmon with vegetables.", "ko_ref": "오늘의 특선 요리는 채소를 곁들인 연어구이입니다."}
+{"id": "conv-016", "dialogue": "restaurant", "turn": 6, "en": "Are you allergic to anything?", "ko_ref": "알레르기 있는 음식이 있으세요?"}
+{"id": "conv-017", "dialogue": "restaurant", "turn": 7, "en": "How would you like your steak cooked?", "ko_ref": "스테이크는 어떻게 익혀 드릴까요?"}
+{"id": "conv-018", "dialogue": "restaurant", "turn": 8, "en": "I'm sorry, we just ran out of that.", "ko_ref": "죄송합니다, 그건 방금 다 떨어졌어요."}
+{"id": "conv-019", "dialogue": "restaurant", "turn": 9, "en": "Would you like to see the dessert menu?", "ko_ref": "디저트 메뉴 보시겠어요?"}
+{"id": "conv-020", "dialogue": "restaurant", "turn": 10, "en": "Would you like to pay together or separately?", "ko_ref": "계산은 같이 하시겠어요, 따로 하시겠어요?"}
+{"id": "conv-021", "dialogue": "meeting", "turn": 1, "en": "Thanks for joining the call on such short notice.", "ko_ref": "급하게 연락드렸는데 통화에 참여해 주셔서 감사합니다."}
+{"id": "conv-022", "dialogue": "meeting", "turn": 2, "en": "Let's start by going over last week's action items.", "ko_ref": "지난주 실행 항목부터 살펴보면서 시작하죠."}
+{"id": "conv-023", "dialogue": "meeting", "turn": 3, "en": "The release has been pushed back by two weeks.", "ko_ref": "출시가 2주 미뤄졌습니다."}
+{"id": "conv-024", "dialogue": "meeting", "turn": 4, "en": "We found a serious bug during testing, and it's not fixed yet.", "ko_ref": "테스트 중에 심각한 버그를 발견했는데 아직 고쳐지지 않았어요."}
+{"id": "conv-025", "dialogue": "meeting", "turn": 5, "en": "Can you send me the report by the end of the day?", "ko_ref": "오늘 중으로 보고서를 보내 주실 수 있나요?"}
+{"id": "conv-026", "dialogue": "meeting", "turn": 6, "en": "I think we're on the same page about the budget.", "ko_ref": "예산에 대해서는 서로 생각이 같은 것 같아요."}
+{"id": "conv-027", "dialogue": "meeting", "turn": 7, "en": "Let's not get ahead of ourselves.", "ko_ref": "너무 앞서가지 맙시다."}
+{"id": "conv-028", "dialogue": "meeting", "turn": 8, "en": "Could you walk me through the numbers on slide five?", "ko_ref": "5번 슬라이드의 수치를 차근차근 설명해 주시겠어요?"}
+{"id": "conv-029", "dialogue": "meeting", "turn": 9, "en": "I'll have to check with my manager and get back to you.", "ko_ref": "제 상사에게 확인해 보고 다시 연락드리겠습니다."}
+{"id": "conv-030", "dialogue": "meeting", "turn": 10, "en": "Let's wrap up here and follow up by email.", "ko_ref": "여기서 마무리하고 이메일로 이어서 이야기하죠."}
+{"id": "conv-031", "dialogue": "smalltalk", "turn": 1, "en": "So, what do you do for a living?", "ko_ref": "그래서, 무슨 일을 하세요?"}
+{"id": "conv-032", "dialogue": "smalltalk", "turn": 2, "en": "How long have you been living in Seoul?", "ko_ref": "서울에 사신 지 얼마나 됐어요?"}
+{"id": "conv-033", "dialogue": "smalltalk", "turn": 3, "en": "I've never been to Korea, but I'd love to visit someday.", "ko_ref": "한국에 가 본 적은 없지만 언젠가 꼭 가 보고 싶어요."}
+{"id": "conv-034", "dialogue": "smalltalk", "turn": 4, "en": "What do you usually do on weekends?", "ko_ref": "주말에는 보통 뭐 하세요?"}
+{"id": "conv-035", "dialogue": "smalltalk", "turn": 5, "en": "I'm really into hiking these days.", "ko_ref": "요즘 등산에 푹 빠져 있어요."}
+{"id": "conv-036", "dialogue": "smalltalk", "turn": 6, "en": "That sounds like a lot of fun.", "ko_ref": "정말 재미있겠네요."}
+{"id": "conv-037", "dialogue": "smalltalk", "turn": 7, "en": "Have you tried the food here yet?", "ko_ref": "여기 음식은 드셔 보셨어요?"}
+{"id": "conv-038", "dialogue": "smalltalk", "turn": 8, "en": "It's a bit spicy for me, but I like it.", "ko_ref": "저한테는 조금 맵지만 좋아해요."}
+{"id": "conv-039", "dialogue": "smalltalk", "turn": 9, "en": "It was really nice talking to you.", "ko_ref": "이야기 나눠서 정말 즐거웠어요."}
+{"id": "conv-040", "dialogue": "smalltalk", "turn": 10, "en": "Let's keep in touch.", "ko_ref": "계속 연락하고 지내요."}
+{"id": "conv-041", "dialogue": "travel", "turn": 1, "en": "Welcome, may I see your passport, please?", "ko_ref": "어서 오세요, 여권 좀 보여 주시겠어요?"}
+{"id": "conv-042", "dialogue": "travel", "turn": 2, "en": "Your room is on the ninth floor, and breakfast is served until ten.", "ko_ref": "객실은 9층이고 조식은 10시까지 제공됩니다."}
+{"id": "conv-043", "dialogue": "travel", "turn": 3, "en": "Check out is at eleven, but we can hold your luggage afterwards.", "ko_ref": "체크아웃은 11시지만 그 후에도 짐을 맡아 드릴 수 있어요."}
+{"id": "conv-044", "dialogue": "travel", "turn": 4, "en": "I'm afraid your flight has been delayed by two hours.", "ko_ref": "죄송하지만 항공편이 두 시간 지연되었습니다."}
+{"id": "conv-045", "dialogue": "travel", "turn": 5, "en": "Did you pack your bags yourself?", "ko_ref": "짐은 직접 싸셨나요?"}
+{"id": "conv-046", "dialogue": "travel", "turn": 6, "en": "Please take your laptop out of your bag.", "ko_ref": "가방에서 노트북을 꺼내 주세요."}
+{"id": "conv-047", "dialogue": "travel", "turn": 7, "en": "Your gate has changed, so please check the screen.", "ko_ref": "탑승구가 변경되었으니 전광판을 확인해 주세요."}
+{"id": "conv-048", "dialogue": "travel", "turn": 8, "en": "Is this your first time visiting the country?", "ko_ref": "이 나라는 처음 방문하시는 건가요?"}
+{"id": "conv-049", "dialogue": "travel", "turn": 9, "en": "How long are you planning to stay?", "ko_ref": "얼마나 머무르실 예정이에요?"}
+{"id": "conv-050", "dialogue": "travel", "turn": 10, "en": "Enjoy your stay.", "ko_ref": "즐거운 시간 보내세요."}
+{"id": "conv-051", "dialogue": "clinic_shop", "turn": 1, "en": "What seems to be the problem today?", "ko_ref": "오늘은 어디가 불편해서 오셨어요?"}
+{"id": "conv-052", "dialogue": "clinic_shop", "turn": 2, "en": "How long have you had these symptoms?", "ko_ref": "이런 증상이 얼마나 오래됐나요?"}
+{"id": "conv-053", "dialogue": "clinic_shop", "turn": 3, "en": "Take one tablet twice a day after meals.", "ko_ref": "하루에 두 번, 식후에 한 알씩 드세요."}
+{"id": "conv-054", "dialogue": "clinic_shop", "turn": 4, "en": "If it gets worse, come back right away.", "ko_ref": "더 심해지면 바로 다시 오세요."}
+{"id": "conv-055", "dialogue": "clinic_shop", "turn": 5, "en": "Are you looking for anything in particular?", "ko_ref": "특별히 찾으시는 게 있으세요?"}
+{"id": "conv-056", "dialogue": "clinic_shop", "turn": 6, "en": "This one is on sale, thirty percent off.", "ko_ref": "이건 세일 중이라 30퍼센트 할인이에요."}
+{"id": "conv-057", "dialogue": "clinic_shop", "turn": 7, "en": "Do you have this in a larger size?", "ko_ref": "이거 더 큰 사이즈 있나요?"}
+{"id": "conv-058", "dialogue": "clinic_shop", "turn": 8, "en": "I'm just looking around, thanks.", "ko_ref": "그냥 둘러보는 중이에요, 감사합니다."}
+{"id": "conv-059", "dialogue": "clinic_shop", "turn": 9, "en": "Can I get a refund if it doesn't fit?", "ko_ref": "안 맞으면 환불받을 수 있나요?"}
+{"id": "conv-060", "dialogue": "clinic_shop", "turn": 10, "en": "It costs an arm and a leg, but it's worth it.", "ko_ref": "엄청 비싸긴 하지만 그만한 가치가 있어요."}

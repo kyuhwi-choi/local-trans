@@ -14,3 +14,7 @@ dependencyResolutionManagement {
 }
 rootProject.name = "local-trans"
 include(":app")
+
+// 번역 벤치마크 전용 앱 (bench/README.md)
+include(":benchmlkit")
+project(":benchmlkit").projectDir = file("bench/mlkit")
