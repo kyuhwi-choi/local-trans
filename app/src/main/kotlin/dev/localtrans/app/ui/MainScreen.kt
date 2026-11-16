@@ -27,9 +27,13 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,6 +51,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -55,6 +60,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.localtrans.app.BuildConfig
 import dev.localtrans.app.llm.Suggestion
 import dev.localtrans.app.pipeline.InterpreterViewModel
+import dev.localtrans.app.pipeline.Mode
+import dev.localtrans.app.pipeline.ModelState
 import dev.localtrans.app.pipeline.Phase
 import dev.localtrans.app.pipeline.UiState
 import dev.localtrans.app.pipeline.Utterance
@@ -119,6 +126,7 @@ fun MainScreen(vm: InterpreterViewModel = viewModel()) {
         ) {
             TopBar(ui = ui, update = update, onCheckUpdate = vm::checkForUpdate)
             UpdateBanner(update = update, onInstall = onInstall, onRetry = vm::checkForUpdate)
+            ModeBar(ui = ui, onMode = vm::setMode)
             if (ui.missingModels.isNotEmpty()) {
                 MissingModelsCard(ui = ui, onRecheck = vm::refreshModelStatus)
             }
@@ -128,12 +136,21 @@ fun MainScreen(vm: InterpreterViewModel = viewModel()) {
 
             Suggestions(suggestions = ui.suggestions, loading = ui.suggesting)
             Spacer(Modifier.height(8.dp))
-            ControlButton(
-                phase = ui.phase,
-                enabled = ui.missingModels.isEmpty(),
-                onStart = onStart,
-                onStop = vm::stop,
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ModelButton(
+                    ui = ui,
+                    onLoad = vm::loadModels,
+                    onUnload = vm::unloadModels,
+                    modifier = Modifier.weight(1f),
+                )
+                ControlButton(
+                    phase = ui.phase,
+                    enabled = ui.missingModels.isEmpty(),
+                    onStart = onStart,
+                    onStop = vm::stop,
+                    modifier = Modifier.weight(1f),
+                )
+            }
             Spacer(Modifier.height(12.dp))
         }
     }
@@ -165,6 +182,43 @@ private fun TopBar(ui: UiState, update: UpdateManager.State, onCheckUpdate: () -
             TextButton(onClick = onCheckUpdate, enabled = update != UpdateManager.State.Checking) {
                 Text("업데이트 확인")
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ModeBar(ui: UiState, onMode: (Mode) -> Unit) {
+    val modes = Mode.entries
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp),
+    ) {
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            modes.forEachIndexed { index, mode ->
+                SegmentedButton(
+                    selected = ui.mode == mode,
+                    onClick = { onMode(mode) },
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
+                ) {
+                    Text(
+                        when (mode) {
+                            Mode.Basic -> "기본 모드"
+                            Mode.Bluetooth -> "블루투스 모드"
+                        }
+                    )
+                }
+            }
+        }
+        if (ui.mode == Mode.Bluetooth) {
+            val line = StatusText.bluetooth(ui.earphone, ui.voice)
+            Text(
+                line.text,
+                modifier = Modifier.padding(top = 4.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (line.warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -267,12 +321,9 @@ private fun Transcript(ui: UiState, modifier: Modifier = Modifier) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                when (ui.phase) {
-                    Phase.Listening -> "듣고 있습니다…"
-                    Phase.Loading -> "모델을 불러오는 중입니다…"
-                    Phase.Idle -> "시작을 누르면 들리는 영어를 한국어 자막으로 보여 줍니다"
-                },
+                StatusText.empty(ui.phase, ui.models, ui.mode),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
             )
         }
         return
@@ -354,18 +405,43 @@ private fun Suggestions(suggestions: List<Suggestion>, loading: Boolean) {
     }
 }
 
+/** 통역과 별개로 모델을 미리 올리거나 메모리에서 내린다. 통역 중에는 내릴 수 없다. */
 @Composable
-private fun ControlButton(phase: Phase, enabled: Boolean, onStart: () -> Unit, onStop: () -> Unit) {
-    when (phase) {
-        Phase.Idle -> Button(onClick = onStart, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
-            Text("통역 시작")
-        }
-        Phase.Loading -> OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth()) {
+private fun ModelButton(ui: UiState, onLoad: () -> Unit, onUnload: () -> Unit, modifier: Modifier = Modifier) {
+    val idle = ui.phase == Phase.Idle
+    when (ui.models) {
+        ModelState.Unloaded -> OutlinedButton(
+            onClick = onLoad,
+            enabled = idle && ui.missingModels.isEmpty(),
+            modifier = modifier,
+        ) { Text("모델 올리기") }
+        ModelState.Loading -> OutlinedButton(onClick = {}, enabled = false, modifier = modifier) {
             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
             Spacer(Modifier.width(8.dp))
-            Text("모델 불러오는 중 · 취소")
+            Text("올리는 중")
         }
-        Phase.Listening -> OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth()) {
+        ModelState.Ready -> OutlinedButton(onClick = onUnload, enabled = idle, modifier = modifier) {
+            Text("모델 내리기")
+        }
+    }
+}
+
+@Composable
+private fun ControlButton(
+    phase: Phase,
+    enabled: Boolean,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    when (phase) {
+        Phase.Idle -> Button(onClick = onStart, enabled = enabled, modifier = modifier) {
+            Text("통역 시작")
+        }
+        Phase.Starting -> OutlinedButton(onClick = onStop, modifier = modifier) {
+            Text("시작 취소")
+        }
+        Phase.Listening -> Button(onClick = onStop, modifier = modifier) {
             Text("중지")
         }
     }

@@ -12,6 +12,7 @@ data class AppConfig(
     val stt: SttConfig = SttConfig(),
     val llm: LlmConfig = LlmConfig(),
     val prompts: PromptConfig = PromptConfig(),
+    val tts: TtsConfig = TtsConfig(),
 ) {
     fun toJson(): String = lenientJson.encodeToString(serializer(), this)
 
@@ -56,6 +57,16 @@ data class LlmConfig(
     /** 번역할 때 참고로 넘기는 직전 발화 수 */
     val contextUtterances: Int = 2,
     val suggestionCount: Int = 3,
+)
+
+/** 블루투스 모드에서 번역을 읽어 주는 음성 설정 */
+@Serializable
+data class TtsConfig(
+    /** 말하는 속도. 1.0 이 보통이고, 대화를 따라가도록 조금 빠르게 둔다. */
+    val rate: Float = 1.15f,
+    val pitch: Float = 1.0f,
+    /** 읽을 문장이 이만큼 밀리면 밀린 것을 버리고 최신 문장부터 읽는다. */
+    val maxQueued: Int = 3,
 )
 
 @Serializable

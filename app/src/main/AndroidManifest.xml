@@ -9,6 +9,13 @@
     <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- 블루투스 모드에서 번역을 읽어 줄 음성 합성 엔진을 찾기 위해 필요 -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
     <application
         android:name=".LocalTransApp"
         android:allowBackup="false"

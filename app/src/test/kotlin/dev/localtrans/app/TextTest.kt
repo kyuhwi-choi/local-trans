@@ -1,10 +1,17 @@
 package dev.localtrans.app
 
 import dev.localtrans.app.config.PromptConfig
+import android.media.AudioDeviceInfo
+import dev.localtrans.app.audio.EarphoneMonitor
 import dev.localtrans.app.llm.Prompts
 import dev.localtrans.app.llm.Suggestion
 import dev.localtrans.app.llm.SuggestionParser
+import dev.localtrans.app.pipeline.Mode
+import dev.localtrans.app.pipeline.ModelState
+import dev.localtrans.app.pipeline.Phase
 import dev.localtrans.app.stt.TextNormalizer
+import dev.localtrans.app.tts.KoreanSpeaker
+import dev.localtrans.app.ui.StatusText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -71,5 +78,34 @@ class TextTest {
     @Test
     fun cleansTranslationDecorations() {
         assertEquals("안녕하세요", Prompts.cleanTranslation(" Korean: \"안녕하세요\" "))
+    }
+
+    @Test
+    fun bluetoothStatusExplainsWhatIsMissing() {
+        val ready = KoreanSpeaker.State.Ready
+        assertTrue(StatusText.bluetooth(null, ready).warning)
+        assertTrue(StatusText.bluetooth("Buds", KoreanSpeaker.State.Unavailable("음성 없음")).warning)
+        assertEquals("음성 없음", StatusText.bluetooth("Buds", KoreanSpeaker.State.Unavailable("음성 없음")).text)
+        val ok = StatusText.bluetooth("Buds", ready)
+        assertTrue(!ok.warning && ok.text.startsWith("Buds"))
+        assertTrue(StatusText.bluetooth("Buds", KoreanSpeaker.State.Preparing).text.contains("준비 중"))
+    }
+
+    @Test
+    fun picksBluetoothEarphoneBeforeWired() {
+        val speaker = AudioDeviceInfo.TYPE_BUILTIN_SPEAKER to "SM-S911N"
+        val wired = AudioDeviceInfo.TYPE_WIRED_HEADSET to "SM-S911N"
+        val buds = AudioDeviceInfo.TYPE_BLUETOOTH_A2DP to "Galaxy Buds2 Pro"
+        assertEquals(null, EarphoneMonitor.pick(listOf(speaker)))
+        assertEquals("유선 이어폰", EarphoneMonitor.pick(listOf(speaker, wired)))
+        assertEquals("Galaxy Buds2 Pro", EarphoneMonitor.pick(listOf(speaker, wired, buds)))
+    }
+
+    @Test
+    fun emptyHintFollowsModelState() {
+        assertTrue(StatusText.empty(Phase.Idle, ModelState.Ready, Mode.Basic).contains("바로 통역"))
+        assertTrue(StatusText.empty(Phase.Idle, ModelState.Loading, Mode.Basic).contains("올리는 중"))
+        assertTrue(StatusText.empty(Phase.Idle, ModelState.Unloaded, Mode.Bluetooth).contains("이어폰"))
+        assertEquals("듣고 있습니다…", StatusText.empty(Phase.Listening, ModelState.Ready, Mode.Bluetooth))
     }
 }

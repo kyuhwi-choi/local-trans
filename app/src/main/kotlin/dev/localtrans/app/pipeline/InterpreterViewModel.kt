@@ -1,11 +1,13 @@
 package dev.localtrans.app.pipeline
 
 import android.app.Application
+import android.content.Context
 import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.localtrans.app.LocalTransApp
 import dev.localtrans.app.BuildConfig
+import dev.localtrans.app.audio.EarphoneMonitor
 import dev.localtrans.app.audio.MicCapture
 import dev.localtrans.app.audio.WavSource
 import dev.localtrans.app.config.AppConfig
@@ -16,10 +18,12 @@ import dev.localtrans.app.llm.Prompts
 import dev.localtrans.app.llm.Suggestion
 import dev.localtrans.app.llm.SuggestionParser
 import dev.localtrans.app.stt.StreamingStt
+import dev.localtrans.app.tts.KoreanSpeaker
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,6 +32,8 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 data class Utterance(
@@ -39,10 +45,25 @@ data class Utterance(
     val latencyMs: Long? = null,
 )
 
-enum class Phase { Idle, Loading, Listening }
+/** Starting 은 통역 시작을 눌렀지만 모델이 아직 올라가는 중인 상태 */
+enum class Phase { Idle, Starting, Listening }
+
+enum class ModelState { Unloaded, Loading, Ready }
+
+enum class Mode {
+    /** 화면의 자막으로만 통역한다. */
+    Basic,
+    /** 자막에 더해, 폰 마이크로 들은 영어의 번역을 이어폰으로 읽어 준다. */
+    Bluetooth,
+}
 
 data class UiState(
     val phase: Phase = Phase.Idle,
+    val models: ModelState = ModelState.Unloaded,
+    val mode: Mode = Mode.Basic,
+    /** 연결된 이어폰 이름. 없으면 null */
+    val earphone: String? = null,
+    val voice: KoreanSpeaker.State = KoreanSpeaker.State.Off,
     val modelDir: String = "",
     val missingModels: List<String> = emptyList(),
     val backend: String = "",
@@ -56,6 +77,7 @@ data class UiState(
 /**
  * 마이크 → 스트리밍 인식 → 구간별 번역 → 답변 제안의 흐름을 묶는다.
  * 번역이 항상 우선이고, 답변 제안은 상대가 다시 말하기 시작하면 중단한다.
+ * 모델은 통역과 따로 올리고 내릴 수 있어서, 미리 올려 두면 통역을 바로 시작할 수 있다.
  */
 class InterpreterViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -67,16 +89,40 @@ class InterpreterViewModel(app: Application) : AndroidViewModel(app) {
     private val _ui = MutableStateFlow(UiState(modelDir = models.root.absolutePath))
     val ui = _ui.asStateFlow()
 
-    private var stt: StreamingStt? = null
-    private var sttKey: SttConfig? = null
-    private var llm: GemmaLlm? = null
-    private var llmKey: LlmConfig? = null
+    private val prefs = app.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    private val speaker = KoreanSpeaker(app)
+    private val earphones = EarphoneMonitor(app)
 
+    // 모델을 올리고 내리는 동안에는 modelLock 을 잡는다.
+    private val modelLock = Mutex()
+    @Volatile private var stt: StreamingStt? = null
+    @Volatile private var sttKey: SttConfig? = null
+    @Volatile private var llm: GemmaLlm? = null
+    @Volatile private var llmKey: LlmConfig? = null
+
+    private var loadJob: Job? = null
     private var session: Job? = null
     private var suggestJob: Job? = null
     private var nextId = 0L
 
     init {
+        val saved = runCatching { Mode.valueOf(prefs.getString(KEY_MODE, null).orEmpty()) }.getOrDefault(Mode.Basic)
+        _ui.update { it.copy(mode = saved) }
+        if (saved == Mode.Bluetooth) speaker.prepare()
+        earphones.start()
+        viewModelScope.launch {
+            earphones.name.collect { name ->
+                DebugTrace.log("earphone: $name")
+                _ui.update { it.copy(earphone = name) }
+            }
+        }
+        viewModelScope.launch {
+            speaker.state.collect { state ->
+                DebugTrace.log("voice: $state")
+                _ui.update { it.copy(voice = state) }
+            }
+        }
+
         refreshModelStatus()
         viewModelScope.launch { if (configRepo.refresh()) refreshModelStatus() }
         viewModelScope.launch { updates.check() }
@@ -100,34 +146,114 @@ class InterpreterViewModel(app: Application) : AndroidViewModel(app) {
         _ui.update { it.copy(error = message) }
     }
 
+    /** 통역 중에도 바꿀 수 있다. 마이크 입력 고정만은 다음 통역 시작부터 적용된다. */
+    fun setMode(mode: Mode) {
+        if (_ui.value.mode == mode) return
+        prefs.edit().putString(KEY_MODE, mode.name).apply()
+        _ui.update { it.copy(mode = mode) }
+        if (mode == Mode.Bluetooth) speaker.prepare() else speaker.stop()
+    }
+
+    /** 통역을 시작하기 전에 모델을 미리 올려 둔다. */
+    fun loadModels() {
+        if (loadJob?.isActive == true) return
+        val cfg = configRepo.config.value
+        if (!modelsPresent(cfg)) return
+        loadJob = viewModelScope.launch {
+            try {
+                ensureModels(cfg)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                showError("모델을 올리지 못했습니다: ${t.message ?: t.javaClass.simpleName}")
+            }
+        }
+    }
+
+    /** 통역을 멈추고 모델을 메모리에서 내린다. */
+    fun unloadModels() {
+        val running = session
+        stop()
+        viewModelScope.launch {
+            // 인식·번역이 모델을 쓰는 도중에 닫으면 안 되므로 완전히 끝난 뒤에 내린다.
+            running?.join()
+            loadJob?.join()
+            modelLock.withLock {
+                withContext(Dispatchers.Default) { releaseModels() }
+                _ui.update { it.copy(models = ModelState.Unloaded, backend = "") }
+            }
+        }
+    }
+
     fun start() {
         if (session?.isActive == true) return
         val cfg = configRepo.config.value
-        val missing = models.missing(cfg.llm)
-        _ui.update { it.copy(missingModels = missing, error = null) }
-        if (missing.isNotEmpty()) return
+        if (!modelsPresent(cfg)) return
 
         session = viewModelScope.launch {
             try {
-                _ui.update { it.copy(phase = Phase.Loading) }
-                withContext(Dispatchers.Default) { ensureLoaded(cfg) }
+                _ui.update { it.copy(phase = Phase.Starting) }
+                ensureModels(cfg)
                 val recognizer = checkNotNull(stt)
                 recognizer.reset()
-                _ui.update { it.copy(phase = Phase.Listening, backend = llm?.activeBackend.orEmpty()) }
+                _ui.update { it.copy(phase = Phase.Listening) }
                 listen(recognizer, cfg)
             } catch (e: CancellationException) {
                 throw e
             } catch (t: Throwable) {
                 showError(t.message ?: t.javaClass.simpleName)
             } finally {
+                speaker.stop()
                 _ui.update { it.copy(phase = Phase.Idle, partial = "", suggesting = false) }
             }
         }
     }
 
+    /** 통역만 멈춘다. 모델은 올라간 채로 두어 다시 시작할 때 바로 듣는다. */
     fun stop() {
         session?.cancel()
         session = null
+    }
+
+    private fun modelsPresent(cfg: AppConfig): Boolean {
+        val missing = models.missing(cfg.llm)
+        _ui.update { it.copy(missingModels = missing, error = null) }
+        return missing.isEmpty()
+    }
+
+    private fun isLoaded(cfg: AppConfig) =
+        stt != null && sttKey == cfg.stt && llm != null && llmKey == cfg.llm
+
+    /** 모델이 [cfg] 대로 올라가 있지 않으면 올린다. 이미 올라가 있으면 바로 돌아온다. */
+    private suspend fun ensureModels(cfg: AppConfig) = modelLock.withLock {
+        if (isLoaded(cfg)) {
+            _ui.update { it.copy(models = ModelState.Ready, backend = llm?.activeBackend.orEmpty()) }
+            return@withLock
+        }
+        _ui.update { it.copy(models = ModelState.Loading) }
+        try {
+            withContext(Dispatchers.Default) { ensureLoaded(cfg) }
+        } finally {
+            // 올리는 작업은 중간에 끊을 수 없다. 취소되었더라도 끝까지 올라갔으면 준비된 상태로 두고,
+            // 실패해서 일부만 올라갔으면 모두 내린다.
+            val ready = isLoaded(cfg)
+            if (!ready) withContext(NonCancellable + Dispatchers.Default) { releaseModels() }
+            _ui.update {
+                it.copy(
+                    models = if (ready) ModelState.Ready else ModelState.Unloaded,
+                    backend = if (ready) llm?.activeBackend.orEmpty() else "",
+                )
+            }
+        }
+    }
+
+    private fun releaseModels() {
+        stt?.close()
+        stt = null
+        sttKey = null
+        llm?.close()
+        llm = null
+        llmKey = null
     }
 
     private fun ensureLoaded(cfg: AppConfig) {
@@ -170,7 +296,9 @@ class InterpreterViewModel(app: Application) : AndroidViewModel(app) {
         val debugInput = models.root.resolveSibling(WavSource.FILE_NAME)
             .takeIf { BuildConfig.DEBUG && it.isFile }
         if (debugInput != null) DebugTrace.log("input: ${debugInput.name}")
-        (debugInput?.let { WavSource.frames(it) } ?: MicCapture.frames())
+        // 블루투스 모드에서는 이어폰 마이크가 아니라 폰 마이크로 듣도록 입력을 고정한다.
+        val mic = if (_ui.value.mode == Mode.Bluetooth) earphones.builtInMic() else null
+        (debugInput?.let { WavSource.frames(it) } ?: MicCapture.frames(preferred = mic))
             .mapNotNull { audio -> DebugTrace.chunk(audio) { recognizer.accept(audio) } }
             .flowOn(Dispatchers.Default)
             .collect { event ->
@@ -212,19 +340,34 @@ class InterpreterViewModel(app: Application) : AndroidViewModel(app) {
             temperature = cfg.llm.translateTemperature,
         )
         try {
+            var korean = ""
             engine.generate(request).collect { text ->
-                updateUtterance(utterance.id) { it.copy(korean = Prompts.cleanTranslation(text)) }
+                korean = Prompts.cleanTranslation(text)
+                updateUtterance(utterance.id) { it.copy(korean = korean) }
             }
             updateUtterance(utterance.id) {
                 it.copy(done = true, latencyMs = SystemClock.elapsedRealtime() - started)
             }
             DebugTrace.log("translate end (${SystemClock.elapsedRealtime() - started} ms)")
+            speak(korean, cfg)
         } catch (e: CancellationException) {
             throw e
         } catch (t: Throwable) {
             updateUtterance(utterance.id) { it.copy(done = true, korean = it.korean.ifEmpty { "(번역 실패)" }) }
             showError("번역 오류: ${t.message ?: t.javaClass.simpleName}")
         }
+    }
+
+    /** 블루투스 모드이고 이어폰이 연결되어 있을 때만 번역을 읽는다. 폰 스피커로는 내보내지 않는다. */
+    private fun speak(korean: String, cfg: AppConfig) {
+        val state = _ui.value
+        if (state.mode != Mode.Bluetooth || korean.isBlank()) return
+        if (state.earphone == null) {
+            DebugTrace.log("speak skipped: no earphone")
+            return
+        }
+        val spoken = speaker.speak(korean, cfg.tts)
+        DebugTrace.log("speak (${if (spoken) "queued" else "voice not ready"}): $korean")
     }
 
     private fun suggest(scope: CoroutineScope, utterance: Utterance, cfg: AppConfig) {
@@ -274,11 +417,14 @@ class InterpreterViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         session?.cancel()
+        earphones.stop()
+        speaker.shutdown()
         stt?.close()
         llm?.close()
     }
 
     private companion object {
         const val MAX_UTTERANCES = 200
+        const val KEY_MODE = "mode"
     }
 }
