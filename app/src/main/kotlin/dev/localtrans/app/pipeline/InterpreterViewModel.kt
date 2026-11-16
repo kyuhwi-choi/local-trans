@@ -5,7 +5,9 @@ import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.localtrans.app.LocalTransApp
+import dev.localtrans.app.BuildConfig
 import dev.localtrans.app.audio.MicCapture
+import dev.localtrans.app.audio.WavSource
 import dev.localtrans.app.config.AppConfig
 import dev.localtrans.app.config.LlmConfig
 import dev.localtrans.app.config.SttConfig
@@ -164,16 +166,22 @@ class InterpreterViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
 
-        MicCapture.frames()
-            .mapNotNull { recognizer.accept(it) }
+        // 디버그 빌드에서 앱 폴더에 debug-input.wav 가 있으면 마이크 대신 그 파일을 입력으로 쓴다.
+        val debugInput = models.root.resolveSibling(WavSource.FILE_NAME)
+            .takeIf { BuildConfig.DEBUG && it.isFile }
+        if (debugInput != null) DebugTrace.log("input: ${debugInput.name}")
+        (debugInput?.let { WavSource.frames(it) } ?: MicCapture.frames())
+            .mapNotNull { audio -> DebugTrace.chunk(audio) { recognizer.accept(audio) } }
             .flowOn(Dispatchers.Default)
             .collect { event ->
                 when (event) {
                     is StreamingStt.Event.Partial -> {
+                        DebugTrace.log("partial: ${event.text}")
                         if (event.text.isNotEmpty()) cancelSuggest()
                         _ui.update { it.copy(partial = event.text) }
                     }
                     is StreamingStt.Event.Final -> {
+                        DebugTrace.log("final: ${event.text}")
                         cancelSuggest()
                         val utterance = Utterance(id = nextId++, english = event.text)
                         _ui.update {
@@ -192,6 +200,7 @@ class InterpreterViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun translate(utterance: Utterance, cfg: AppConfig) {
         val engine = llm ?: return
         val started = SystemClock.elapsedRealtime()
+        DebugTrace.log("translate start: ${utterance.english}")
         val request = GemmaLlm.Request(
             system = cfg.prompts.translateSystem,
             user = Prompts.translateUser(
@@ -209,6 +218,7 @@ class InterpreterViewModel(app: Application) : AndroidViewModel(app) {
             updateUtterance(utterance.id) {
                 it.copy(done = true, latencyMs = SystemClock.elapsedRealtime() - started)
             }
+            DebugTrace.log("translate end (${SystemClock.elapsedRealtime() - started} ms)")
         } catch (e: CancellationException) {
             throw e
         } catch (t: Throwable) {
@@ -234,6 +244,8 @@ class InterpreterViewModel(app: Application) : AndroidViewModel(app) {
         suggestJob?.cancel()
         suggestJob = scope.launch {
             _ui.update { it.copy(suggesting = true, suggestions = emptyList()) }
+            val started = SystemClock.elapsedRealtime()
+            DebugTrace.log("suggest start")
             try {
                 engine.generate(request).collect { raw ->
                     _ui.update { it.copy(suggestions = SuggestionParser.parse(raw, count)) }
@@ -243,6 +255,7 @@ class InterpreterViewModel(app: Application) : AndroidViewModel(app) {
             } catch (_: Throwable) {
                 // 답변 제안 실패는 통역을 멈출 이유가 아니다.
             } finally {
+                DebugTrace.log("suggest end (${SystemClock.elapsedRealtime() - started} ms)")
                 _ui.update { it.copy(suggesting = false) }
             }
         }

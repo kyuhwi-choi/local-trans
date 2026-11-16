@@ -42,12 +42,29 @@ class TextTest {
     }
 
     @Test
+    fun dropsPreambleAndEnglishNotes() {
+        val raw = """
+            Here are 3 short, natural English replies:
+            Okay, I'll be there. | 네, 갈게요. (Agreeing/Confirming)
+            Sounds good (to me). | 좋아요 (저는요).
+        """.trimIndent()
+        assertEquals(
+            listOf(
+                Suggestion("Okay, I'll be there.", "네, 갈게요."),
+                Suggestion("Sounds good (to me).", "좋아요 (저는요)."),
+            ),
+            SuggestionParser.parse(raw, 3),
+        )
+    }
+
+    @Test
     fun fillsPromptTemplates() {
         val cfg = PromptConfig()
         val noContext = Prompts.translateUser(cfg, "How are you", emptyList())
-        assertEquals("Translate to Korean:\nHow are you", noContext)
+        assertEquals("Translate only this sentence into Korean:\nHow are you", noContext)
         val withContext = Prompts.translateUser(cfg, "How are you", listOf("Hi there"))
-        assertTrue(withContext.startsWith("Earlier in the conversation:\nHi there\n\n"))
+        assertTrue(withContext.startsWith("Previous sentences, for context only (do not translate these):\n- Hi there\n\n"))
+        assertTrue(withContext.endsWith("Translate only this sentence into Korean:\nHow are you"))
         assertTrue(Prompts.suggestSystem(cfg, 3).contains("suggest 3 short"))
     }
 

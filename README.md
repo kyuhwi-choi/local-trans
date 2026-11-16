@@ -42,6 +42,16 @@
 
 디버그 빌드와 릴리스 빌드는 같은 키로 서명하므로 서로 덮어쓸 수 있다.
 
+### 폰에서 시험하기 (디버그 빌드)
+
+- 진단 로그: `adb logcat -s LocalTrans` — 0.5초마다 마이크 음량(dB)과 인식 시간, 구간 확정·번역·답변 제안 시각을 찍는다.
+  말소리는 -20dB 안팎이어야 하고, -40dB 근처(주변 소음 수준)로 떨어지면 단어가 빠진다.
+- 음성 파일 입력: 16kHz 모노 16비트 WAV를 `/sdcard/Android/data/dev.localtrans.app/files/debug-input.wav` 로 넣으면
+  마이크 대신 그 파일을 입력으로 쓴다. 같은 입력으로 프롬프트·임계값을 비교할 때 쓴다. **시험이 끝나면 파일을 지울 것.**
+  (예: `say -o x.wav --data-format=LEI16@16000 "Hello"` 로 만든 파일)
+- 설정을 push 하기 전에 시험하려면 `remote/` 를 로컬 서버로 띄우고 `adb reverse` 한 뒤
+  `scripts/dev-install.sh -Pupdate.configUrl=http://127.0.0.1:8765/config.json` 로 설치한다.
+
 ## 설정 항목 (`remote/config.json`)
 
 - `stt.endpointSilenceSec`: 이만큼 조용하면 구간을 끊고 번역을 시작한다. 줄이면 빨라지지만 문장이 잘게 잘린다.

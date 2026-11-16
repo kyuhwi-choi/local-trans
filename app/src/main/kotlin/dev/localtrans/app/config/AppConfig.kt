@@ -66,14 +66,14 @@ data class PromptConfig(
             "speech recognition, so it may lack punctuation or contain small errors; infer the " +
             "intended meaning. Output only the Korean translation, with no explanations or notes.",
     /** {context} 는 직전 발화(없으면 빈 문자열), {text} 는 번역할 문장 */
-    val translateUser: String = "{context}Translate to Korean:\n{text}",
+    val translateUser: String = "{context}Translate only this sentence into Korean:\n{text}",
     /** {n} 은 제안 개수 */
     val suggestSystem: String =
         "You help a Korean speaker reply in an English conversation. Given what the other " +
             "person just said, suggest {n} short, natural English replies the user could say next. " +
             "Make them different in intent (for example: agree, ask a follow-up question, politely " +
-            "decline). Output exactly {n} lines and nothing else. Each line must be: " +
-            "English reply | 한국어 뜻",
+            "decline). Output exactly {n} lines and nothing else: no introduction, no numbering, " +
+            "no notes in parentheses. Each line must be: English reply | 한국어 뜻",
     /** {context} 는 직전 발화, {text} 는 상대가 방금 한 말 */
     val suggestUser: String = "{context}They said:\n{text}",
 )

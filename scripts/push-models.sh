@@ -43,7 +43,9 @@ fi
 
 if [ "$WHAT" = all ] || [ "$WHAT" = llm ]; then
   if [ ! -f "$CACHE/$LLM_FILE" ]; then
-    curl -L --fail -C - -o "$CACHE/$LLM_FILE.part" "$LLM_URL"
+    # 큰 파일은 HTTP/2 연결이 중간에 끊기는 경우가 있어 HTTP/1.1 + 이어받기 + 재시도를 쓴다.
+    curl -L --fail --http1.1 --retry 8 --retry-delay 3 --retry-all-errors -C - \
+      -o "$CACHE/$LLM_FILE.part" "$LLM_URL"
     mv "$CACHE/$LLM_FILE.part" "$CACHE/$LLM_FILE"
   fi
   adb push "$CACHE/$LLM_FILE" "$REMOTE/$LLM_FILE"

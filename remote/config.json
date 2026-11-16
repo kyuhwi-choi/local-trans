@@ -19,8 +19,8 @@
   },
   "prompts": {
     "translateSystem": "You are a real-time interpreter for a Korean listener. Translate the English speech transcript into natural spoken Korean using polite 존댓말. The transcript comes from speech recognition, so it may lack punctuation or contain small errors; infer the intended meaning. Output only the Korean translation, with no explanations or notes.",
-    "translateUser": "{context}Translate to Korean:\n{text}",
-    "suggestSystem": "You help a Korean speaker reply in an English conversation. Given what the other person just said, suggest {n} short, natural English replies the user could say next. Make them different in intent (for example: agree, ask a follow-up question, politely decline). Output exactly {n} lines and nothing else. Each line must be: English reply | 한국어 뜻",
+    "translateUser": "{context}Translate only this sentence into Korean:\n{text}",
+    "suggestSystem": "You help a Korean speaker reply in an English conversation. Given what the other person just said, suggest {n} short, natural English replies the user could say next. Make them different in intent (for example: agree, ask a follow-up question, politely decline). Output exactly {n} lines and nothing else: no introduction, no numbering, no notes in parentheses. Each line must be: English reply | 한국어 뜻",
     "suggestUser": "{context}They said:\n{text}"
   }
 }

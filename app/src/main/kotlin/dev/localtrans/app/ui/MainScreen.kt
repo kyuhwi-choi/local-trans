@@ -38,7 +38,9 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -243,14 +245,19 @@ private fun ErrorCard(message: String, onDismiss: () -> Unit) {
     }
 }
 
+/** 목록 끝까지 내리기 위한 넉넉한 오프셋. 실제 스크롤은 내용 끝에서 멈춘다. */
+private const val SCROLL_TO_END = 1_000_000
+
 @Composable
 private fun Transcript(ui: UiState, modifier: Modifier = Modifier) {
     val listState = rememberLazyListState()
     val lastKorean = ui.utterances.lastOrNull()?.korean.orEmpty()
-    // 새 자막이 들어오면 맨 아래로 따라간다.
-    LaunchedEffect(ui.utterances.size, ui.partial, lastKorean) {
-        val count = listState.layoutInfo.totalItemsCount
-        if (count > 0) listState.scrollToItem(count - 1)
+    // 답변 제안이 나타나면 자막 영역이 아래에서부터 줄어들어 마지막 자막이 가려지므로, 영역 높이도 함께 지켜본다.
+    val viewportHeight by remember { derivedStateOf { listState.layoutInfo.viewportSize.height } }
+    // 새 자막이 들어오면 맨 아래로 따라간다. 마지막 자막이 화면보다 길어도 끝이 보이도록 끝까지 내린다.
+    LaunchedEffect(ui.utterances.size, ui.partial, lastKorean, viewportHeight) {
+        val count = ui.utterances.size + if (ui.partial.isNotEmpty()) 1 else 0
+        if (count > 0) listState.scrollToItem(count - 1, scrollOffset = SCROLL_TO_END)
     }
 
     if (ui.utterances.isEmpty() && ui.partial.isEmpty()) {
