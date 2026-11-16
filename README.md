@@ -1,0 +1,59 @@
+# 로컬 통역 (local-trans)
+
+갤럭시 S23용 오프라인 통역 앱. 폰 마이크로 들리는 영어를 실시간 자막으로 보여 주고,
+구간마다 한국어로 번역하며, 답할 수 있는 문장을 영어+한국어로 2~3개 제안한다.
+
+- 음성 인식: sherpa-onnx 스트리밍 모델 (기기 내 실행)
+- 번역·답변 제안: Gemma 4 E2B, LiteRT-LM (기기 내 실행)
+- 인터넷은 **앱 업데이트 확인과 설정 받기에만** 쓴다. 통역은 오프라인으로 동작한다.
+
+## 업데이트 구조
+
+갱신 주기가 다른 세 가지를 분리했다.
+
+| 대상 | 갱신 방법 | 폰에서 할 일 |
+|---|---|---|
+| 앱(APK, 약 70MB) | `scripts/release.sh "변경 내용"` | 앱을 열고 **업데이트** 한 번 누르기 |
+| 프롬프트·임계값 | `remote/config.json` 수정 후 push | 없음 (다음 실행 때 자동 반영) |
+| 모델(약 3GB) | `scripts/push-models.sh` (최초 1회) | 없음 (앱 업데이트 후에도 유지) |
+
+앱은 시작할 때 `latest.json` 을 확인하고, 새 버전이면 APK를 받아 SHA-256을 검증한 뒤
+`PackageInstaller` 로 자기 자신을 업데이트한다. 설치가 끝나면 앱이 닫히고 "업데이트 완료" 알림이 뜬다.
+
+## 처음 한 번 설정
+
+1. `scripts/fetch-deps.sh` — 빌드에 필요한 sherpa-onnx AAR 받기
+2. `scripts/init-signing.sh` — 서명 키 생성. **`signing/` 폴더를 따로 백업할 것.**
+   키를 잃으면 기존 설치본을 업데이트할 수 없어 앱을 지우고 다시 깔아야 하고, 그러면 모델도 함께 지워진다.
+3. `gradle.properties` 의 `update.repo` 에 배포용 GitHub 저장소(`owner/name`)를 적는다.
+4. 폰을 USB로 연결하고 `scripts/dev-install.sh` 로 첫 설치를 한 뒤 앱을 한 번 실행한다.
+5. `scripts/push-models.sh` 로 모델을 넣는다.
+6. 폰에서 처음 업데이트할 때 "출처를 알 수 없는 앱 설치"를 이 앱에 허용한다.
+   (갤럭시의 보안 위험 자동 차단(Auto Blocker)이 켜져 있으면 설치가 막히므로 꺼야 한다.)
+7. Google Play Protect는 처음 보는 APK를 설치할 때 "앱 검사 권장" 창을 띄운다(에뮬레이터에서 확인).
+   새 빌드는 매번 처음 보는 파일이라 업데이트마다 뜰 수 있다. "앱 검사"를 누르면 APK가 Google로 전송되어
+   검사된 뒤 설치가 이어지고, "설치 안 함"을 누르면 앱에 "설치 실패"로 표시된다.
+
+## 일상적인 흐름
+
+- 개발 중: `scripts/dev-install.sh` (USB/무선 adb로 바로 덮어쓰기)
+- 들고 다니는 폰 갱신: `scripts/release.sh "변경 내용"` → 폰에서 앱 열고 업데이트
+- 프롬프트 조정: `remote/config.json` 수정 → push
+
+디버그 빌드와 릴리스 빌드는 같은 키로 서명하므로 서로 덮어쓸 수 있다.
+
+## 설정 항목 (`remote/config.json`)
+
+- `stt.endpointSilenceSec`: 이만큼 조용하면 구간을 끊고 번역을 시작한다. 줄이면 빨라지지만 문장이 잘게 잘린다.
+- `stt.maxUtteranceSec`: 쉬지 않고 말해도 이 길이에서 강제로 끊는다.
+- `llm.backend`: `gpu` / `npu` / `cpu`. 실패하면 `cpu` 로 내려간다.
+- `prompts.*`: 번역·답변 제안 프롬프트. `{text}`, `{context}`, `{n}` 자리표시자를 쓴다.
+
+## 코드 구조 (`app/src/main/kotlin/dev/localtrans/app`)
+
+- `update/` 자체 업데이트 (확인, 다운로드·검증, 설치, 완료 알림)
+- `config/` 원격 설정 (기본값 → 캐시 → 원격)
+- `audio/`, `stt/` 마이크 입력과 스트리밍 인식
+- `llm/` Gemma 실행, 프롬프트, 답변 제안 파싱
+- `pipeline/` 전체 흐름 (번역 우선, 상대가 다시 말하면 답변 제안 중단)
+- `ui/` 자막 화면
