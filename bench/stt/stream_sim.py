@@ -15,6 +15,7 @@ run.sh 는 발화를 하나씩 따로 인식해 정확도와 속도를 재지만
 import argparse
 import json
 import random
+import re
 import statistics
 import wave
 from pathlib import Path
@@ -34,6 +35,11 @@ SEED = 20261117
 ENDPOINT_SILENCE, IDLE_SILENCE, MAX_UTTERANCE = 0.6, 2.4, 8.0
 # 글자 없이 끊긴 구간에서도 마지막 이만큼은 남겨 다음 구간 앞에 붙인다 (앱의 StreamingStt.KEEP_ON_EMPTY_SEC).
 KEEP_ON_EMPTY = 1.5
+# 침묵을 재는 VAD (앱의 SilenceDetector 와 같은 값). 인식기는 0.5초쯤마다 한 번씩만 결과를 내서 침묵을 늦게 알아챈다.
+VAD_MODEL = MODELS / "silero-vad" / "silero_vad.onnx"
+VAD_THRESHOLD, VAD_MIN_SILENCE, VAD_MIN_SPEECH = 0.5, 0.1, 0.1
+# 구간을 강제로 끝낼 때 마지막 단어까지 받아 내려고 덧붙이는 무음 (앱의 StreamingStt.FLUSH_PAD_SEC)
+FLUSH_PAD = 0.6
 
 
 def load_engines():
@@ -68,8 +74,30 @@ def build_stream(per_set, gap_min, gap_max):
     return np.concatenate(parts), clips
 
 
-def simulate(engine, audio, second, keep_on_empty):
-    """앱의 StreamingStt 와 같은 순서로 넣고 끊는다. [(구간 시작, 끊긴 시각, 스트리밍 문장, 2단계 문장)]"""
+def words(text):
+    """대소문자와 구두점만 다른 문장은 같은 말로 본다 (앱의 TextNormalizer.sameWords)."""
+    return re.findall(r"[^\W_]+(?:'[^\W_]+)*", text.lower())
+
+
+def make_vad():
+    config = sherpa_onnx.VadModelConfig()
+    config.silero_vad.model = str(VAD_MODEL)
+    config.silero_vad.threshold = VAD_THRESHOLD
+    config.silero_vad.min_silence_duration = VAD_MIN_SILENCE
+    config.silero_vad.min_speech_duration = VAD_MIN_SPEECH
+    config.sample_rate = RATE
+    return sherpa_onnx.VoiceActivityDetector(config, buffer_size_in_seconds=30)
+
+
+def simulate(engine, audio, second, keep_on_empty, endpoint="recognizer", speculate=0.0):
+    """앱의 StreamingStt 와 같은 순서로 넣고 끊는다.
+
+    endpoint 가 "vad" 면 VAD 가 잰 침묵이 ENDPOINT_SILENCE 에 이르는 즉시 구간을 끝낸다 (인식기의 규칙은 그대로 남아 뒤를 받친다).
+    speculate 가 0 보다 크면 침묵이 그만큼 이어졌을 때 "미리 번역"을 시작한 것으로 치고, 그 뒤 말이 이어지면 버린 것으로 센다.
+    미리 번역한 채로 구간이 끝나도, 앱처럼 그때까지의 음성을 2단계 모델로 인식한 문장이 구간 전체를 인식한 문장과
+    같은 말일 때만 이어 쓴 것으로 친다 (VAD 가 작은 말소리를 놓쳐 문장이 잘렸을 수 있다).
+    돌려주는 값: ([(구간 시작, 끊긴 시각, 스트리밍 문장, 2단계 문장, 이어 쓴 미리 번역을 시작한 시각 또는 None)], 버린 미리 번역 수)
+    """
     recognizer = sherpa_onnx.OnlineRecognizer.from_transducer(
         tokens=model_path(engine, "tokens"), encoder=model_path(engine, "encoder"),
         decoder=model_path(engine, "decoder"), joiner=model_path(engine, "joiner"),
@@ -79,49 +107,92 @@ def simulate(engine, audio, second, keep_on_empty):
         model_type=engine.get("modelType", ""),
     )
     stream = recognizer.create_stream()
-    segments, segment_start = [], 0
-    for pos in range(0, len(audio), CHUNK):
-        stream.accept_waveform(RATE, audio[pos:pos + CHUNK])
+    vad = make_vad() if endpoint == "vad" or speculate > 0 else None
+    segments, segment_start, discarded = [], 0, 0
+    heard, silent, tentative = False, 0.0, None  # 이 구간에서 말소리가 있었는지, 침묵 길이, 미리 시작한 시각
+
+    def refine(samples):
+        offline = second.create_stream()
+        offline.accept_waveform(RATE, samples)
+        second.decode_stream(offline)
+        return offline.result.text.strip()
+
+    def decode_text():
         while recognizer.is_ready(stream):
             recognizer.decode_stream(stream)
-        if recognizer.is_endpoint(stream):
-            text = recognizer.get_result(stream).strip()
+        return recognizer.get_result(stream).strip()
+
+    for pos in range(0, len(audio), CHUNK):
+        chunk = audio[pos:pos + CHUNK]
+        end = min(pos + CHUNK, len(audio))
+        stream.accept_waveform(RATE, chunk)
+        text = decode_text()
+        if vad is not None:
+            vad.accept_waveform(chunk)
+            while not vad.empty():
+                vad.pop()
+            if vad.is_speech_detected():
+                if tentative is not None:
+                    discarded += 1
+                    tentative = None
+                heard, silent = True, 0.0
+            elif heard:
+                # VAD 는 침묵이 VAD_MIN_SILENCE 만큼 이어진 뒤에야 말이 끝났다고 알린다.
+                silent = VAD_MIN_SILENCE if silent == 0.0 else silent + len(chunk) / RATE
+        cut = recognizer.is_endpoint(stream)
+        if not cut and endpoint == "vad" and heard and silent >= ENDPOINT_SILENCE:
+            stream.accept_waveform(RATE, np.zeros(int(FLUSH_PAD * RATE), dtype=np.float32))
+            text = decode_text()
+            cut = True
+            keep = 0.0  # VAD 가 침묵이라고 본 뒤이므로 남길 말소리가 없다
+        else:
+            keep = keep_on_empty
+        if cut:
             recognizer.reset(stream)
-            end = min(pos + CHUNK, len(audio))
             if text:
-                refined = ""
-                if second is not None:
-                    offline = second.create_stream()
-                    offline.accept_waveform(RATE, audio[segment_start:end])
-                    second.decode_stream(offline)
-                    refined = offline.result.text.strip()
-                segments.append((segment_start / RATE, end / RATE, text, refined))
+                refined = refine(audio[segment_start:end]) if second is not None else ""
+                if tentative is not None and (
+                    second is None or words(refine(audio[segment_start:int(tentative * RATE)])) != words(refined)
+                ):
+                    discarded += 1
+                    tentative = None
+                segments.append((segment_start / RATE, end / RATE, text, refined, tentative))
                 segment_start = end
             else:
                 # 말이 막 시작될 때 글자 없이 끊기는 일이 있어, 버리면 다음 구간의 첫 단어를 잃는다.
-                segment_start = max(segment_start, end - int(keep_on_empty * RATE))
-    return segments
+                segment_start = max(segment_start, end - int(keep * RATE))
+                if tentative is not None:
+                    discarded += 1
+            heard, silent, tentative = False, 0.0, None
+        elif speculate > 0 and tentative is None and heard and silent >= speculate:
+            tentative = end / RATE
+    return segments, discarded
 
 
-def report(label, clips, segments, normalize, use_second):
+def report(label, clips, segments, discarded, normalize, use_second, speculate):
     refs = [word for _, _, ref in clips for word in normalize(ref)]
     cut_delays, missed = [], 0
     for index, (start, end, _) in enumerate(clips):
         next_start = clips[index + 1][0] if index + 1 < len(clips) else float("inf")
         # 발화가 끝난 뒤, 다음 발화가 시작되기 전에 끊긴 구간이 있는가
-        cuts = [seg_end for _, seg_end, _, _ in segments if end <= seg_end <= next_start]
+        cuts = [seg[1] for seg in segments if end <= seg[1] <= next_start]
         if cuts:
             cut_delays.append(min(cuts) - end)
-        if not any(seg_start < end and seg_end > start for seg_start, seg_end, _, _ in segments):
+        if not any(seg[0] < end and seg[1] > start for seg in segments):
             missed += 1
-    first = [word for _, _, text, _ in segments for word in normalize(text)]
+    first = [word for seg in segments for word in normalize(seg[2])]
     row = [label, f"{len(segments)}", f"{100 * len(cut_delays) / len(clips):.0f}%",
            f"{statistics.median(cut_delays):.1f}초 / {sorted(cut_delays)[int(0.9 * (len(cut_delays) - 1))]:.1f}초"
            if cut_delays else "-",
            f"{missed}", f"{100 * errors(refs, first) / len(refs):.1f}"]
     if use_second:
-        refined = [word for _, _, text, better in segments for word in normalize(better or text)]
+        refined = [word for seg in segments for word in normalize(seg[3] or seg[2])]
         row.append(f"{100 * errors(refs, refined) / len(refs):.1f}")
+    if speculate > 0:
+        leads = [seg[1] - seg[4] for seg in segments if seg[4] is not None]
+        row.append(f"{len(leads)} / {len(segments)}")
+        row.append(f"{statistics.median(leads):.2f}초" if leads else "-")
+        row.append(f"{discarded}")
     return "| " + " | ".join(row) + " |"
 
 
@@ -132,6 +203,10 @@ def main():
     parser.add_argument("--per-set", type=int, default=20, help="세트마다 쓸 발화 수")
     parser.add_argument("--gap", type=float, nargs=2, default=[1.2, 2.5], help="발화 사이 무음 길이 범위(초)")
     parser.add_argument("--show", action="store_true", help="구간별 문장도 출력")
+    parser.add_argument("--endpoint", choices=["recognizer", "vad"], default="recognizer",
+                        help="구간을 끝내는 기준. recognizer 는 인식기 규칙만으로(앱과 같음), vad 는 VAD 가 잰 침묵으로(실험용)")
+    parser.add_argument("--speculate", type=float, default=0.3,
+                        help="침묵이 이만큼 이어지면 미리 번역을 시작한다(초, 앱의 stt.speculateSilenceSec). 0 이면 끈다")
     parser.add_argument("--keep-on-empty", type=float, default=KEEP_ON_EMPTY,
                         help="글자 없이 끊긴 구간에서 남길 음성 길이(초). 0 이면 모두 버린다")
     args = parser.parse_args()
@@ -153,14 +228,19 @@ def main():
     header = ["스트리밍 모델", "구간 수", "제때 끊김", "끊길 때까지 (중앙값 / 90%)", "놓친 발화", "스트리밍 WER"]
     if second is not None:
         header.append(f"2단계 WER ({args.second})")
+    if args.speculate > 0:
+        header += ["미리 번역을 이어 쓴 구간", "앞당긴 시간 (중앙값)", "버린 미리 번역"]
     print("| " + " | ".join(header) + " |")
     print("|" + "---|" * len(header))
     for engine_id in ids:
-        segments = simulate(engines[engine_id], audio, second, args.keep_on_empty)
-        print(report(engines[engine_id]["label"], clips, segments, normalize, second is not None), flush=True)
+        segments, discarded = simulate(engines[engine_id], audio, second, args.keep_on_empty,
+                                       args.endpoint, args.speculate)
+        print(report(engines[engine_id]["label"], clips, segments, discarded, normalize, second is not None,
+                     args.speculate), flush=True)
         if args.show:
-            for start, end, text, refined in segments:
-                print(f"    {start:7.1f}~{end:6.1f}  {text}  =>  {refined}")
+            for start, end, text, refined, tentative in segments:
+                early = f" (미리 {end - tentative:.1f}초)" if tentative is not None else ""
+                print(f"    {start:7.1f}~{end:6.1f}{early}  {text}  =>  {refined}")
 
 
 if __name__ == "__main__":

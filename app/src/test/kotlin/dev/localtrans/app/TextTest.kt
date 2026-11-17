@@ -9,6 +9,7 @@ import dev.localtrans.app.llm.SuggestionParser
 import dev.localtrans.app.pipeline.Mode
 import dev.localtrans.app.pipeline.ModelState
 import dev.localtrans.app.pipeline.Phase
+import dev.localtrans.app.pipeline.SessionLink
 import dev.localtrans.app.stt.TextNormalizer
 import dev.localtrans.app.tts.KoreanSpeaker
 import dev.localtrans.app.ui.StatusText
@@ -110,5 +111,26 @@ class TextTest {
         assertTrue(StatusText.empty(Phase.Idle, ModelState.Loading, Mode.Basic).contains("올리는 중"))
         assertTrue(StatusText.empty(Phase.Idle, ModelState.Unloaded, Mode.Bluetooth).contains("이어폰"))
         assertEquals("듣고 있습니다…", StatusText.empty(Phase.Listening, ModelState.Ready, Mode.Bluetooth))
+        assertTrue(StatusText.empty(Phase.Listening, ModelState.Ready, Mode.Basic, paused = true).contains("멈췄습니다"))
+        // 통역 중이 아니면 멈춤 표시는 의미가 없다.
+        assertTrue(StatusText.empty(Phase.Idle, ModelState.Ready, Mode.Basic, paused = true).contains("바로 통역"))
+    }
+
+    @Test
+    fun notificationStatusFollowsPhaseAndPause() {
+        assertEquals(SessionLink.Status.Off, SessionLink.statusOf(Phase.Idle, paused = true))
+        assertEquals(SessionLink.Status.Starting, SessionLink.statusOf(Phase.Starting, paused = false))
+        assertEquals(SessionLink.Status.Listening, SessionLink.statusOf(Phase.Listening, paused = false))
+        assertEquals(SessionLink.Status.Paused, SessionLink.statusOf(Phase.Listening, paused = true))
+    }
+
+    @Test
+    fun sameWordsIgnoresCaseAndPunctuation() {
+        assertTrue(TextNormalizer.sameWords("Excuse me could you help", "Excuse me, could you help?"))
+        assertTrue(TextNormalizer.sameWords("let's see", "Let's see."))
+        // 뒤가 잘렸거나 낱말이 다르면 다른 말이다.
+        assertTrue(!TextNormalizer.sameWords("It wouldn't be full color,", "It wouldn't be full color, it would be black."))
+        assertTrue(!TextNormalizer.sameWords("two questions per term.", "two questions per turn."))
+        assertTrue(!TextNormalizer.sameWords("", "Hello"))
     }
 }

@@ -19,7 +19,8 @@ internal object StatusText {
     }
 
     /** 자막이 아직 없을 때 화면 가운데에 보여 주는 안내 */
-    fun empty(phase: Phase, models: ModelState, mode: Mode): String = when {
+    fun empty(phase: Phase, models: ModelState, mode: Mode, paused: Boolean = false): String = when {
+        phase == Phase.Listening && paused -> "듣기를 멈췄습니다. 다시 듣기를 누르면 이어서 통역합니다"
         phase == Phase.Listening -> "듣고 있습니다…"
         models == ModelState.Loading -> "모델을 올리는 중입니다…"
         models == ModelState.Ready -> "모델이 준비되었습니다. 시작을 누르면 바로 통역합니다"

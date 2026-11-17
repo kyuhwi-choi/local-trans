@@ -24,10 +24,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -124,7 +127,7 @@ fun MainScreen(vm: InterpreterViewModel = viewModel()) {
                 .navigationBarsPadding()
                 .padding(horizontal = 16.dp),
         ) {
-            TopBar(ui = ui, update = update, onCheckUpdate = vm::checkForUpdate)
+            TopBar(ui = ui, update = update, onCheckUpdate = vm::checkForUpdate, onRecording = vm::setRecording)
             UpdateBanner(update = update, onInstall = onInstall, onRetry = vm::checkForUpdate)
             ModeBar(ui = ui, onMode = vm::setMode)
             if (ui.missingModels.isNotEmpty()) {
@@ -136,6 +139,10 @@ fun MainScreen(vm: InterpreterViewModel = viewModel()) {
 
             Suggestions(suggestions = ui.suggestions, loading = ui.suggesting)
             Spacer(Modifier.height(8.dp))
+            if (listening) {
+                TurnButton(paused = ui.paused, onToggle = { vm.setPaused(!ui.paused) })
+                Spacer(Modifier.height(8.dp))
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ModelButton(
                     ui = ui,
@@ -157,7 +164,12 @@ fun MainScreen(vm: InterpreterViewModel = viewModel()) {
 }
 
 @Composable
-private fun TopBar(ui: UiState, update: UpdateManager.State, onCheckUpdate: () -> Unit) {
+private fun TopBar(
+    ui: UiState,
+    update: UpdateManager.State,
+    onCheckUpdate: () -> Unit,
+    onRecording: (Boolean) -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -177,6 +189,15 @@ private fun TopBar(ui: UiState, update: UpdateManager.State, onCheckUpdate: () -
                 "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})$backend$secondPass$status",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        // 디버그 빌드 전용: 통역할 때 들은 음성과 결과를 파일로 남긴다 (bench/e2e 에서 다시 돌려 볼 수 있다).
+        if (BuildConfig.DEBUG) {
+            FilterChip(
+                selected = ui.recording,
+                onClick = { onRecording(!ui.recording) },
+                enabled = ui.phase == Phase.Idle,
+                label = { Text("음성 저장") },
             )
         }
         if (update != UpdateManager.State.Disabled) {
@@ -322,7 +343,7 @@ private fun Transcript(ui: UiState, modifier: Modifier = Modifier) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                StatusText.empty(ui.phase, ui.models, ui.mode),
+                StatusText.empty(ui.phase, ui.models, ui.mode, ui.paused),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
@@ -423,6 +444,25 @@ private fun ModelButton(ui: UiState, onLoad: () -> Unit, onUnload: () -> Unit, m
         }
         ModelState.Ready -> OutlinedButton(onClick = onUnload, enabled = idle, modifier = modifier) {
             Text("모델 내리기")
+        }
+    }
+}
+
+/** 내가 말할 차례에 듣기를 멈췄다가 다시 듣는다. 멈춘 동안에는 눈에 띄는 색으로 바꿔 다시 누르는 것을 잊지 않게 한다. */
+@Composable
+private fun TurnButton(paused: Boolean, onToggle: () -> Unit) {
+    if (paused) {
+        Button(
+            onClick = onToggle,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.error,
+                contentColor = MaterialTheme.colorScheme.onError,
+            ),
+        ) { Text("듣기 멈춤 · 눌러서 다시 듣기") }
+    } else {
+        FilledTonalButton(onClick = onToggle, modifier = Modifier.fillMaxWidth()) {
+            Text("내 차례 (듣기 멈춤)")
         }
     }
 }

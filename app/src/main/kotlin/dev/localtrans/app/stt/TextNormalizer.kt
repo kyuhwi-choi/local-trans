@@ -3,6 +3,12 @@ package dev.localtrans.app.stt
 object TextNormalizer {
     private val spaces = Regex("\\s+")
     private val loneI = Regex("\\bi(?=\\b|')")
+    private val notWord = Regex("[^\\p{L}\\p{N}']+")
+
+    /** 대소문자와 구두점만 다른 문장은 같은 말로 본다. */
+    fun sameWords(a: String, b: String): Boolean = words(a) == words(b)
+
+    private fun words(text: String): List<String> = text.lowercase().split(notWord).filter { it.isNotEmpty() }
 
     /**
      * 스트리밍 인식 모델 중에는 전부 대문자나 전부 소문자로 내보내는 것이 있다.

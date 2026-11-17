@@ -56,6 +56,11 @@ python3 bench/stt/stream_sim.py zipformer-kroko-2025 fastconformer-480ms --secon
 발화를 무음을 사이에 두고 이어 붙여 앱과 같은 규칙으로 흘려보내고, 구간이 제때 끊기는지와 2단계 인식 후 오류율을 잰다.
 모델은 `run.sh` (또는 `fetch_models.py`) 가 받아 둔 것을 쓴다.
 
+앱의 "미리 번역"(말이 잠깐 멈추면 구간이 끝나기 전에 2단계 인식과 번역을 시작)도 같은 규칙으로 흉내 내어,
+이어 쓴 구간 수와 앞당긴 시간, 버린 횟수를 함께 보여 준다. 침묵은 앱처럼 Silero VAD 로 잰다
+(`~/.cache/local-trans-bench/stt-models/silero-vad/silero_vad.onnx`, 앱 빌드용으로 `scripts/fetch-deps.sh` 가 받는 것과 같은 파일).
+`--speculate 0.4` 처럼 기준을 바꾸거나 `--speculate 0` 으로 끌 수 있다. 실제 폰에서의 지연은 `bench/e2e/` 로 잰다.
+
 ## 읽을 때 주의할 점
 
 - 세트마다 발화가 50~60개(단어 수백 개)라서 오류율 1~2%p 차이는 우연일 수 있다.

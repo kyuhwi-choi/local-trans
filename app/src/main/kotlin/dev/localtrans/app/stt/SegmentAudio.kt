@@ -30,6 +30,9 @@ internal class SegmentAudio(private val maxSamples: Int) {
     /** 모아 둔 음성을 돌려주고 비운다. */
     fun take(): FloatArray = data.copyOf(size).also { size = 0 }
 
+    /** 모아 둔 음성을 비우지 않고 복사해 돌려준다. */
+    fun peek(): FloatArray = data.copyOf(size)
+
     /** 마지막 [samples] 개만 남기고 앞쪽을 버린다. */
     fun keepLast(samples: Int) {
         if (size <= samples) return

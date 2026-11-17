@@ -44,6 +44,11 @@ data class SttConfig(
     /** 구간이 끝나면 더 정확한 문장 단위 모델로 다시 인식해 번역에 넘긴다 (모델 파일이 있을 때만). */
     val secondPass: Boolean = true,
     val secondPassThreads: Int = 2,
+    /**
+     * 말이 이만큼 멈추면 구간이 끝나기를 기다리지 않고 미리 2단계 인식과 번역을 시작한다 (2단계 모델이 있을 때만).
+     * 그 뒤 말이 이어지면 버리고, 그대로 구간이 끝나면 이어서 쓴다. 0 이면 끈다.
+     */
+    val speculateSilenceSec: Float = 0.3f,
 )
 
 @Serializable

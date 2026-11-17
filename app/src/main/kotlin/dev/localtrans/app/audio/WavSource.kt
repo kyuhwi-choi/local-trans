@@ -11,10 +11,11 @@ import kotlinx.coroutines.flow.flowOn
 /**
  * 마이크 대신 WAV 파일(16kHz 모노 16비트 PCM)을 실제 말하는 속도로 흘려보낸다.
  * 방 안 소리에 좌우되지 않고 같은 입력으로 통역 흐름을 되풀이해 시험하기 위한 디버그용 입력이다.
- * 파일이 끝나면 무음을 계속 내보내 마지막 구간이 끊기도록 한다.
+ * 파일이 끝나면 무음을 2초 더 내보낸 뒤 끝난다 (통역도 밀린 번역을 마치고 함께 끝난다).
  */
 object WavSource {
     const val FILE_NAME = "debug-input.wav"
+    private const val TAIL_SILENCE_MS = 2_000
 
     fun frames(file: File, chunkMs: Int = 100): Flow<FloatArray> = flow {
         val bytes = file.readBytes()
@@ -22,7 +23,9 @@ object WavSource {
         val chunk = MicCapture.SAMPLE_RATE * chunkMs / 1000
         var pos = start
         var next = SystemClock.elapsedRealtime()
-        while (true) {
+        // 마지막 구간이 끊기고 번역될 수 있도록, 파일이 끝난 뒤에도 무음을 조금 더 흘려보낸 다음 끝낸다.
+        var tail = TAIL_SILENCE_MS / chunkMs
+        while (pos + 1 < bytes.size || tail-- > 0) {
             val out = FloatArray(chunk)
             var i = 0
             while (i < chunk && pos + 1 < bytes.size) {
@@ -30,9 +33,10 @@ object WavSource {
                 out[i++] = sample / 32768f
                 pos += 2
             }
-            emit(out)
+            // 마이크처럼, 조각만큼의 시간이 흐른 뒤에 내보낸다.
             next += chunkMs
             delay((next - SystemClock.elapsedRealtime()).coerceAtLeast(0))
+            emit(out)
         }
     }.flowOn(Dispatchers.IO)
 
