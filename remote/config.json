@@ -3,7 +3,9 @@
     "numThreads": 2,
     "endpointSilenceSec": 0.6,
     "idleSilenceSec": 2.4,
-    "maxUtteranceSec": 8.0
+    "maxUtteranceSec": 8.0,
+    "secondPass": true,
+    "secondPassThreads": 2
   },
   "llm": {
     "modelFile": "gemma-4-E2B-it.litertlm",

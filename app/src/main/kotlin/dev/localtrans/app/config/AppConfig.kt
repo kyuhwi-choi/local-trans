@@ -41,6 +41,9 @@ data class SttConfig(
     val idleSilenceSec: Float = 2.4f,
     /** 쉬지 않고 말해도 이 길이에서 강제로 끊는다. */
     val maxUtteranceSec: Float = 8f,
+    /** 구간이 끝나면 더 정확한 문장 단위 모델로 다시 인식해 번역에 넘긴다 (모델 파일이 있을 때만). */
+    val secondPass: Boolean = true,
+    val secondPassThreads: Int = 2,
 )
 
 @Serializable

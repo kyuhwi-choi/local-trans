@@ -16,12 +16,21 @@ class ModelStore(context: Context) {
     val root: File = File(context.getExternalFilesDir(null) ?: context.filesDir, "models").apply {
         // 앱이 먼저 폴더를 만들어 둬야 adb push 로 넣은 파일의 소유권이 꼬이지 않는다.
         File(this, "stt").mkdirs()
+        File(this, "stt2").mkdirs()
     }
 
     fun llmFile(cfg: LlmConfig) = File(root, cfg.modelFile)
 
-    fun sttFiles(): SttFiles {
-        val dir = File(root, "stt")
+    /** 실시간 자막용 스트리밍 모델 */
+    fun sttFiles() = sttFiles("stt")
+
+    /** 구간을 다시 인식하는 2단계 모델. 없어도 앱은 스트리밍 모델만으로 동작한다. */
+    fun secondPassFiles() = sttFiles("stt2")
+
+    fun hasSecondPass() = secondPassFiles().all().all { it.isFile && it.length() > 0L }
+
+    private fun sttFiles(folder: String): SttFiles {
+        val dir = File(root, folder)
         return SttFiles(
             encoder = File(dir, "encoder.onnx"),
             decoder = File(dir, "decoder.onnx"),

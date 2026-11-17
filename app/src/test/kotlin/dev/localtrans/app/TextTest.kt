@@ -22,6 +22,9 @@ class TextTest {
         assertEquals("Hello I'm fine and I think so", TextNormalizer.normalize("  HELLO I'M  FINE AND I THINK SO "))
         assertEquals("Hello I'm here", TextNormalizer.normalize("HELLO I'M HERE"))
         assertEquals("", TextNormalizer.normalize("   "))
+        // 전부 소문자로 내보내는 모델도 같은 형태로 바꾼다.
+        assertEquals("Uh maybe I'd say I can sit down", TextNormalizer.normalize("uh maybe i'd say i can sit down"))
+        assertEquals("Let's see", TextNormalizer.normalize("let's see"))
     }
 
     @Test

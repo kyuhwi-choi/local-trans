@@ -17,13 +17,16 @@ import dev.localtrans.app.llm.GemmaLlm
 import dev.localtrans.app.llm.Prompts
 import dev.localtrans.app.llm.Suggestion
 import dev.localtrans.app.llm.SuggestionParser
+import dev.localtrans.app.stt.SecondPassStt
 import dev.localtrans.app.stt.StreamingStt
 import dev.localtrans.app.tts.KoreanSpeaker
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -67,6 +70,8 @@ data class UiState(
     val modelDir: String = "",
     val missingModels: List<String> = emptyList(),
     val backend: String = "",
+    /** 구간을 다시 인식하는 2단계 모델이 올라가 있는지 */
+    val secondPass: Boolean = false,
     val partial: String = "",
     val utterances: List<Utterance> = emptyList(),
     val suggestions: List<Suggestion> = emptyList(),
@@ -75,7 +80,8 @@ data class UiState(
 )
 
 /**
- * 마이크 → 스트리밍 인식 → 구간별 번역 → 답변 제안의 흐름을 묶는다.
+ * 마이크 → 스트리밍 인식 → (2단계 인식) → 구간별 번역 → 답변 제안의 흐름을 묶는다.
+ * 2단계 모델이 있으면 자막은 스트리밍 결과로 바로 띄우고, 구간이 끝나면 다시 인식한 문장으로 바꿔 번역한다.
  * 번역이 항상 우선이고, 답변 제안은 상대가 다시 말하기 시작하면 중단한다.
  * 모델은 통역과 따로 올리고 내릴 수 있어서, 미리 올려 두면 통역을 바로 시작할 수 있다.
  */
@@ -96,7 +102,8 @@ class InterpreterViewModel(app: Application) : AndroidViewModel(app) {
     // 모델을 올리고 내리는 동안에는 modelLock 을 잡는다.
     private val modelLock = Mutex()
     @Volatile private var stt: StreamingStt? = null
-    @Volatile private var sttKey: SttConfig? = null
+    @Volatile private var second: SecondPassStt? = null
+    @Volatile private var sttKey: SttKey? = null
     @Volatile private var llm: GemmaLlm? = null
     @Volatile private var llmKey: LlmConfig? = null
 
@@ -180,7 +187,7 @@ class InterpreterViewModel(app: Application) : AndroidViewModel(app) {
             loadJob?.join()
             modelLock.withLock {
                 withContext(Dispatchers.Default) { releaseModels() }
-                _ui.update { it.copy(models = ModelState.Unloaded, backend = "") }
+                _ui.update { it.copy(models = ModelState.Unloaded, backend = "", secondPass = false) }
             }
         }
     }
@@ -221,13 +228,18 @@ class InterpreterViewModel(app: Application) : AndroidViewModel(app) {
         return missing.isEmpty()
     }
 
+    private fun sttKeyFor(cfg: AppConfig) = SttKey(cfg.stt, cfg.stt.secondPass && models.hasSecondPass())
+
     private fun isLoaded(cfg: AppConfig) =
-        stt != null && sttKey == cfg.stt && llm != null && llmKey == cfg.llm
+        stt != null && sttKey == sttKeyFor(cfg) && llm != null && llmKey == cfg.llm
+
+    private fun readyState(state: UiState) =
+        state.copy(models = ModelState.Ready, backend = llm?.activeBackend.orEmpty(), secondPass = second != null)
 
     /** 모델이 [cfg] 대로 올라가 있지 않으면 올린다. 이미 올라가 있으면 바로 돌아온다. */
     private suspend fun ensureModels(cfg: AppConfig) = modelLock.withLock {
         if (isLoaded(cfg)) {
-            _ui.update { it.copy(models = ModelState.Ready, backend = llm?.activeBackend.orEmpty()) }
+            _ui.update { readyState(it) }
             return@withLock
         }
         _ui.update { it.copy(models = ModelState.Loading) }
@@ -239,10 +251,7 @@ class InterpreterViewModel(app: Application) : AndroidViewModel(app) {
             val ready = isLoaded(cfg)
             if (!ready) withContext(NonCancellable + Dispatchers.Default) { releaseModels() }
             _ui.update {
-                it.copy(
-                    models = if (ready) ModelState.Ready else ModelState.Unloaded,
-                    backend = if (ready) llm?.activeBackend.orEmpty() else "",
-                )
+                if (ready) readyState(it) else it.copy(models = ModelState.Unloaded, backend = "", secondPass = false)
             }
         }
     }
@@ -250,6 +259,8 @@ class InterpreterViewModel(app: Application) : AndroidViewModel(app) {
     private fun releaseModels() {
         stt?.close()
         stt = null
+        second?.close()
+        second = null
         sttKey = null
         llm?.close()
         llm = null
@@ -257,11 +268,20 @@ class InterpreterViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun ensureLoaded(cfg: AppConfig) {
-        if (stt == null || sttKey != cfg.stt) {
+        val key = sttKeyFor(cfg)
+        if (stt == null || sttKey != key) {
             stt?.close()
             stt = null
-            stt = StreamingStt(models.sttFiles(), cfg.stt)
-            sttKey = cfg.stt
+            second?.close()
+            second = null
+            stt = StreamingStt(models.sttFiles(), cfg.stt, keepAudio = key.secondPass)
+            if (key.secondPass) {
+                // 2단계 모델은 없어도 통역이 되므로, 올리지 못하면 스트리밍 인식만으로 계속한다.
+                second = runCatching { SecondPassStt(models.secondPassFiles(), cfg.stt) }
+                    .onFailure { showError("2단계 인식 모델을 올리지 못해 스트리밍 인식만 씁니다: ${it.message ?: it.javaClass.simpleName}") }
+                    .getOrNull()
+            }
+            sttKey = key
         }
         if (llm == null || llmKey != cfg.llm) {
             llm?.close()
@@ -280,12 +300,17 @@ class InterpreterViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun listen(recognizer: StreamingStt, cfg: AppConfig) = coroutineScope {
-        val finals = Channel<Utterance>(Channel.UNLIMITED)
+        val finals = Channel<Heard>(Channel.UNLIMITED)
         var pending = 0 // 메인 스레드에서만 읽고 쓴다
+        val refiner = second
+        // 2단계 인식은 구간이 끝나자마자 시작하되, 인식기를 한 번에 한 구간씩만 쓰도록 한 줄로 세운다.
+        val refineQueue = Dispatchers.Default.limitedParallelism(1)
 
         launch {
-            for (utterance in finals) {
-                translate(utterance, cfg)
+            for (heard in finals) {
+                val started = SystemClock.elapsedRealtime()
+                val utterance = refined(heard)
+                translate(utterance, cfg, started)
                 pending--
                 // 밀린 번역이 없을 때만 답변 제안을 만든다.
                 if (pending == 0) suggest(this@coroutineScope, utterance, cfg)
@@ -316,7 +341,13 @@ class InterpreterViewModel(app: Application) : AndroidViewModel(app) {
                             it.copy(partial = "", utterances = (it.utterances + utterance).takeLast(MAX_UTTERANCES))
                         }
                         pending++
-                        finals.send(utterance)
+                        val audio = event.audio
+                        val refining = if (refiner != null && audio != null) {
+                            async(refineQueue) { secondPass(refiner, audio) }
+                        } else {
+                            null
+                        }
+                        finals.send(Heard(utterance, refining))
                     }
                 }
             }
@@ -325,9 +356,28 @@ class InterpreterViewModel(app: Application) : AndroidViewModel(app) {
     private fun previousEnglish(before: Long, count: Int): List<String> =
         _ui.value.utterances.filter { it.id < before }.takeLast(count).map { it.english }
 
-    private suspend fun translate(utterance: Utterance, cfg: AppConfig) {
-        val engine = llm ?: return
+    /** 2단계 인식 결과. 실패하거나 아무것도 못 들었으면 빈 문자열을 돌려줘 스트리밍 결과를 그대로 쓰게 한다. */
+    private fun secondPass(refiner: SecondPassStt, audio: FloatArray): String {
         val started = SystemClock.elapsedRealtime()
+        val text = runCatching { refiner.recognize(audio) }.getOrDefault("")
+        DebugTrace.log(
+            "second pass (${SystemClock.elapsedRealtime() - started} ms, " +
+                "${audio.size * 10 / MicCapture.SAMPLE_RATE / 10f} s): $text"
+        )
+        return text
+    }
+
+    /** 2단계 인식이 끝나기를 기다려, 결과가 있으면 화면의 영어 문장을 그것으로 바꾼다. */
+    private suspend fun refined(heard: Heard): Utterance {
+        val text = heard.refining?.await().orEmpty()
+        if (text.isEmpty() || text == heard.utterance.english) return heard.utterance
+        updateUtterance(heard.utterance.id) { it.copy(english = text) }
+        return heard.utterance.copy(english = text)
+    }
+
+    /** [started] 는 구간이 확정되어 처리를 시작한 시각 (2단계 인식 시간도 지연에 넣는다). */
+    private suspend fun translate(utterance: Utterance, cfg: AppConfig, started: Long) {
+        val engine = llm ?: return
         DebugTrace.log("translate start: ${utterance.english}")
         val request = GemmaLlm.Request(
             system = cfg.prompts.translateSystem,
@@ -420,8 +470,15 @@ class InterpreterViewModel(app: Application) : AndroidViewModel(app) {
         earphones.stop()
         speaker.shutdown()
         stt?.close()
+        second?.close()
         llm?.close()
     }
+
+    /** 음성 인식 모델을 다시 올려야 하는지 가리는 값: 설정과, 2단계 모델을 쓰는지 */
+    private data class SttKey(val cfg: SttConfig, val secondPass: Boolean)
+
+    /** 확정된 구간과, 진행 중인 2단계 인식(없으면 null) */
+    private class Heard(val utterance: Utterance, val refining: Deferred<String>?)
 
     private companion object {
         const val MAX_UTTERANCES = 200

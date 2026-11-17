@@ -167,13 +167,14 @@ private fun TopBar(ui: UiState, update: UpdateManager.State, onCheckUpdate: () -
         Column(modifier = Modifier.weight(1f)) {
             Text("로컬 통역", style = MaterialTheme.typography.titleLarge)
             val backend = if (ui.backend.isNotEmpty()) " · ${ui.backend.uppercase()}" else ""
+            val secondPass = if (ui.secondPass) " · 2단계 인식" else ""
             val status = when (update) {
                 UpdateManager.State.Checking -> " · 업데이트 확인 중"
                 UpdateManager.State.UpToDate -> " · 최신 버전"
                 else -> ""
             }
             Text(
-                "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})$backend$status",
+                "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})$backend$secondPass$status",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
