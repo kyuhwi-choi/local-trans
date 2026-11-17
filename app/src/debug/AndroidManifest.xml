@@ -7,5 +7,10 @@
             android:name=".bench.BenchActivity"
             android:exported="true"
             android:label="번역 벤치마크" />
+        <!-- 음성 인식 벤치마크 실행기. bench/stt/run.sh 가 adb 로 띄운다. -->
+        <activity
+            android:name=".bench.SttBenchActivity"
+            android:exported="true"
+            android:label="음성 인식 벤치마크" />
     </application>
 </manifest>

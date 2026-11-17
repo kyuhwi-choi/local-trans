@@ -1,0 +1,149 @@
+[
+  {
+    "id": "zipformer-2023",
+    "label": "Zipformer 2023-06-26 (현재 앱)",
+    "mode": "streaming",
+    "kind": "online-transducer",
+    "archive": "sherpa-onnx-streaming-zipformer-en-2023-06-26",
+    "files": {
+      "encoder": "encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx",
+      "decoder": "decoder-epoch-99-avg-1-chunk-16-left-128.onnx",
+      "joiner": "joiner-epoch-99-avg-1-chunk-16-left-128.int8.onnx",
+      "tokens": "tokens.txt"
+    }
+  },
+  {
+    "id": "zipformer-2023-fp32",
+    "label": "Zipformer 2023-06-26 (양자화 안 함)",
+    "mode": "streaming",
+    "kind": "online-transducer",
+    "archive": "sherpa-onnx-streaming-zipformer-en-2023-06-26",
+    "files": {
+      "encoder": "encoder-epoch-99-avg-1-chunk-16-left-128.onnx",
+      "decoder": "decoder-epoch-99-avg-1-chunk-16-left-128.onnx",
+      "joiner": "joiner-epoch-99-avg-1-chunk-16-left-128.onnx",
+      "tokens": "tokens.txt"
+    }
+  },
+  {
+    "id": "zipformer-kroko-2025",
+    "label": "Zipformer Kroko 2025-08-06",
+    "mode": "streaming",
+    "kind": "online-transducer",
+    "modelType": "zipformer2",
+    "archive": "sherpa-onnx-streaming-zipformer-en-kroko-2025-08-06",
+    "files": {
+      "encoder": "encoder.onnx",
+      "decoder": "decoder.onnx",
+      "joiner": "joiner.onnx",
+      "tokens": "tokens.txt"
+    }
+  },
+  {
+    "id": "fastconformer-480ms",
+    "label": "NeMo FastConformer 스트리밍 480ms (0.1B)",
+    "mode": "streaming",
+    "kind": "online-transducer",
+    "archive": "sherpa-onnx-nemo-streaming-fast-conformer-transducer-en-480ms-int8",
+    "files": {
+      "encoder": "encoder.int8.onnx",
+      "decoder": "decoder.int8.onnx",
+      "joiner": "joiner.int8.onnx",
+      "tokens": "tokens.txt"
+    }
+  },
+  {
+    "id": "nemotron-560ms",
+    "label": "Nemotron Speech Streaming 0.6B 560ms",
+    "mode": "streaming",
+    "kind": "online-transducer",
+    "archive": "sherpa-onnx-nemotron-speech-streaming-en-0.6b-560ms-int8-2026-04-25",
+    "files": {
+      "encoder": "encoder.int8.onnx",
+      "decoder": "decoder.int8.onnx",
+      "joiner": "joiner.int8.onnx",
+      "tokens": "tokens.txt"
+    }
+  },
+  {
+    "id": "parakeet-unified-560ms",
+    "label": "Parakeet Unified 0.6B 스트리밍 560ms",
+    "mode": "streaming",
+    "kind": "online-transducer",
+    "archive": "sherpa-onnx-nemo-parakeet-unified-en-0.6b-int8-streaming-560ms",
+    "files": {
+      "encoder": "encoder.int8.onnx",
+      "decoder": "decoder.int8.onnx",
+      "joiner": "joiner.int8.onnx",
+      "tokens": "tokens.txt"
+    }
+  },
+  {
+    "id": "parakeet-110m",
+    "label": "Parakeet TDT 0.1B",
+    "mode": "offline",
+    "kind": "offline-transducer",
+    "modelType": "nemo_transducer",
+    "archive": "sherpa-onnx-nemo-parakeet_tdt_transducer_110m-en-36000-int8",
+    "files": {
+      "encoder": "encoder.int8.onnx",
+      "decoder": "decoder.int8.onnx",
+      "joiner": "joiner.int8.onnx",
+      "tokens": "tokens.txt"
+    }
+  },
+  {
+    "id": "moonshine-base",
+    "label": "Moonshine Base (2026-02)",
+    "mode": "offline",
+    "kind": "offline-moonshine",
+    "archive": "sherpa-onnx-moonshine-base-en-quantized-2026-02-27",
+    "files": {
+      "encoder": "encoder_model.ort",
+      "mergedDecoder": "decoder_model_merged.ort",
+      "tokens": "tokens.txt"
+    }
+  },
+  {
+    "id": "parakeet-v2",
+    "label": "Parakeet TDT 0.6B v2",
+    "mode": "offline",
+    "kind": "offline-transducer",
+    "modelType": "nemo_transducer",
+    "archive": "sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8",
+    "files": {
+      "encoder": "encoder.int8.onnx",
+      "decoder": "decoder.int8.onnx",
+      "joiner": "joiner.int8.onnx",
+      "tokens": "tokens.txt"
+    }
+  },
+  {
+    "id": "parakeet-unified",
+    "label": "Parakeet Unified 0.6B (문장 단위)",
+    "mode": "offline",
+    "kind": "offline-transducer",
+    "modelType": "nemo_transducer",
+    "archive": "sherpa-onnx-nemo-parakeet-unified-en-0.6b-int8-non-streaming",
+    "files": {
+      "encoder": "encoder.int8.onnx",
+      "decoder": "decoder.int8.onnx",
+      "joiner": "joiner.int8.onnx",
+      "tokens": "tokens.txt"
+    }
+  },
+  {
+    "id": "whisper-turbo",
+    "label": "Whisper large-v3-turbo",
+    "mode": "offline",
+    "kind": "offline-whisper",
+    "modelType": "whisper",
+    "optional": true,
+    "archive": "sherpa-onnx-whisper-turbo",
+    "files": {
+      "encoder": "turbo-encoder.int8.onnx",
+      "decoder": "turbo-decoder.int8.onnx",
+      "tokens": "turbo-tokens.txt"
+    }
+  }
+]
